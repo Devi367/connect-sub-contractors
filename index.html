@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Connect Sub-Contractors</title>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.2/firebase-database-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      margin: 0;
+      background: linear-gradient(to right, #ffecd2, #fcb69f);
+      color: #333;
+    }
+    .container {
+      max-width: 700px;
+      margin: 30px auto;
+      background: #fff;
+      padding: 25px;
+      border-radius: 12px;
+      box-shadow: 0 8px 16px rgba(0,0,0,0.2);
+    }
+    h1, h3 {
+      text-align: center;
+      color: #bf360c;
+    }
+    label {
+      margin: 10px 0 5px;
+      display: block;
+      font-weight: bold;
+    }
+    input, select, button {
+      width: 100%;
+      padding: 10px;
+      margin-bottom: 15px;
+      border-radius: 6px;
+      border: 1px solid #ccc;
+      font-size: 15px;
+    }
+    button {
+      background: #e64a19;
+      color: white;
+      border: none;
+      cursor: pointer;
+    }
+    button:hover { background: #bf360c; }
+    .hidden { display: none; }
+    .user-item {
+      background: #fff3e0;
+      padding: 10px;
+      border-left: 4px solid #ff9800;
+      border-radius: 8px;
+      margin-bottom: 10px;
+    }
+    .chat-box {
+      height: 200px;
+      overflow-y: scroll;
+      border: 1px solid #ccc;
+      padding: 10px;
+      background: #f1f1f1;
+      margin-bottom: 10px;
+    }
+    .popup {
+      position: fixed;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #4caf50;
+      color: white;
+      padding: 10px 20px;
+      border-radius: 8px;
+      display: none;
+      z-index: 1000;
+    }
+    #dashboardTabs button {
+      margin: 5px;
+      padding: 8px 12px;
+      font-size: 14px;
+    }
+  </style>
+</head>
+<body>
+<div class="popup" id="popup">Message</div>
+<div class="container" id="roleSelector">
+  <h1>Connect Sub-Contractors</h1>
+  <label>Language:</label>
+  <select id="lang" onchange="setLanguage(this.value)">
+    <option value="en">English</option>
+    <option value="hi">हिन्दी</option>
+  </select>
+  <label>I am a:</label>
+  <select id="role">
+    <option value="">Select Role</option>
+    <option value="contractor">Contractor</option>
+    <option value="foreman">Foreman</option>
+  </select>
+  <button onclick="proceedToForm()">Continue</button>
+</div>
+
+<div class="container hidden" id="registrationForm">
+  <h1 data-i18n="register">Contractor Registration</h1>
+  <label>Name:</label><input type="text" id="name">
+  <label>Location:</label><input type="text" id="location">
+  <label>Work Type:</label><input type="text" id="work">
+  <label>Phone:</label><input type="text" id="phone">
+  <button onclick="registerUser()">Register</button>
+</div>
+
+<div class="container hidden" id="dashboard">
+  <h1 data-i18n="dashboard">Dashboard</h1>
+  <div id="dashboardTabs">
+    <button onclick="toggleTab('searchSection')">🔍 Find Contractors</button>
+    <button onclick="toggleTab('liveChat')">💬 Live Chat</button>
+    <button onclick="toggleTab('safetyTopics')">📋 Safety Topics</button>
+  </div>
+
+  <div id="searchSection" class="tab">
+    <h3>Search by Work Type:</h3>
+    <input type="text" id="search">
+    <button onclick="searchWork()">Search</button>
+    <div id="userList"></div>
+  </div>
+
+  <div id="liveChat" class="tab hidden">
+    <h3>Live Chat</h3>
+    <div class="chat-box" id="chatBox"></div>
+    <input type="text" id="chatInput" placeholder="Type your message...">
+    <button onclick="sendMessage()">Send</button>
+  </div>
+
+  <div id="safetyTopics" class="tab hidden">
+    <h3>Safety Meeting Topics</h3>
+    <input type="text" id="topicSearch" placeholder="Search topic..." onkeyup="searchTopics()">
+    <ul id="topicList"></ul>
+  </div>
+</div>
+
+<script>
+  const firebaseConfig = {
+    apiKey: "AIzaSyExampleKey",
+    authDomain: "your-app.firebaseapp.com",
+    databaseURL: "https://your-app.firebaseio.com",
+    projectId: "your-app",
+    storageBucket: "your-app.appspot.com",
+    messagingSenderId: "1234567890",
+    appId: "1:1234567890:web:example"
+  };
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.database();
+
+  const folders = {};
+  const translations = {
+    en: { register: "Contractor Registration", dashboard: "Dashboard" },
+    hi: { register: "ठेकेदार पंजीकरण", dashboard: "डैशबोर्ड" }
+  };
+
+  function setLanguage(lang) {
+    document.querySelectorAll('[data-i18n]').forEach(el => {
+      const key = el.getAttribute('data-i18n');
+      el.textContent = translations[lang][key] || el.textContent;
+    });
+  }
+
+  function showPopup(msg, color = '#4caf50') {
+    const popup = document.getElementById('popup');
+    popup.textContent = msg;
+    popup.style.backgroundColor = color;
+    popup.style.display = 'block';
+    setTimeout(() => popup.style.display = 'none', 3000);
+  }
+
+  function proceedToForm() {
+    const role = document.getElementById('role').value;
+    if (!role) return showPopup('Please select a role', '#f44336');
+    document.getElementById('roleSelector').classList.add('hidden');
+    if (role === 'contractor') {
+      document.getElementById('registrationForm').classList.remove('hidden');
+    } else {
+      document.getElementById('dashboard').classList.remove('hidden');
+    }
+  }
+
+  function registerUser() {
+    const name = document.getElementById('name').value;
+    const location = document.getElementById('location').value;
+    const work = document.getElementById('work').value.toLowerCase();
+    const phone = document.getElementById('phone').value;
+    if (!name || !location || !work || !phone) return showPopup('All fields required', '#f44336');
+    if (!folders[work]) folders[work] = [];
+    folders[work].push({ name, location, phone });
+    showPopup('Contractor registered!');
+    document.getElementById('registrationForm').classList.add('hidden');
+    document.getElementById('dashboard').classList.remove('hidden');
+  }
+
+  function searchWork() {
+    const search = document.getElementById('search').value.toLowerCase();
+    const userList = document.getElementById('userList');
+    userList.innerHTML = '';
+    if (!folders[search]) return userList.innerHTML = '<p>No contractors found.</p>';
+    userList.innerHTML = '<h3>Available Contractors:</h3>';
+    folders[search].forEach(u => {
+      const div = document.createElement('div');
+      div.className = 'user-item';
+      div.innerHTML = `<strong>${u.name}</strong> from ${u.location}<br>Phone: ${u.phone}`;
+      userList.appendChild(div);
+    });
+  }
+
+  function toggleTab(id) {
+    document.querySelectorAll('.tab').forEach(tab => tab.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function sendMessage() {
+    const msg = document.getElementById('chatInput').value;
+    if (!msg) return;
+    db.ref("chat").push({ text: msg, timestamp: Date.now() });
+    document.getElementById('chatInput').value = '';
+  }
+
+  db.ref("chat").on("child_added", data => {
+    const msg = data.val();
+    const box = document.getElementById('chatBox');
+    const div = document.createElement('div');
+    div.textContent = msg.text;
+    box.appendChild(div);
+    box.scrollTop = box.scrollHeight;
+  });
+
+  const safetyTopics = [
+    "Fall Protection", "Scaffolding Safety", "Hazard Communication", "Ladder Usage",
+    "Personal Protective Equipment (PPE)", "Confined Spaces", "Electrical Hazards", "Fire Safety",
+    "Machine Guarding", "Tool Safety", "Excavation Safety", "Workplace Violence", "Lockout/Tagout"
+  ];
+  function searchTopics() {
+    const keyword = document.getElementById('topicSearch').value.toLowerCase();
+    const list = document.getElementById('topicList');
+    list.innerHTML = '';
+    safetyTopics.filter(t => t.toLowerCase().includes(keyword)).forEach(topic => {
+      const li = document.createElement('li');
+      li.textContent = topic;
+      list.appendChild(li);
+    });
+  }
+</script>
+</body>
+</html>
